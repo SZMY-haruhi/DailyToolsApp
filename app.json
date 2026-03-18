@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "TodoApp",
+    "name": "DailyToolsApp",
     "slug": "TodoApp",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -43,7 +43,9 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "expo-localization",
+      "./plugins/withLocalizedAppName"
     ],
     "experiments": {
       "typedRoutes": true,
