@@ -10,17 +10,9 @@
     "preview": {
       "android": {
         "buildType": "apk"
-      },
-      "resourceClass": "large",
-      "cache": {
-        "paths": [
-          "node_modules/**/*"
-        ]
       }
     },
-    "production": {
-      "resourceClass": "large"
-    }
+    "production": {}
   },
   "submit": {
     "production": {}
