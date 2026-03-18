@@ -11,11 +11,3 @@ jobs:
     params:
       platform: android
       profile: preview
-
-  upload_to_github:
-    type: github-release
-    needs: [build_android]
-    params:
-      tag: v${{ steps.build_android.outputs.version }}
-      upload_artifacts: true
-      github_token: ${{ secrets.GITHUB_TOKEN }}
