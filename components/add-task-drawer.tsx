@@ -366,7 +366,7 @@ export function AddTaskDrawer({ visible, onClose, scheme, theme, onAddTask, edit
           >
             <TouchableOpacity activeOpacity={1} onPress={() => {}}>
               <View style={styles.handleContainer} {...panResponder.panHandlers}>
-                <View style={styles.handle} />
+                <View style={[styles.handle, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.25)' : 'rgba(42, 37, 32, 0.25)' }]} />
               </View>
 
               <View style={styles.header}>

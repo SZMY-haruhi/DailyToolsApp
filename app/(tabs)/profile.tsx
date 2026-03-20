@@ -1,13 +1,30 @@
+import { SettingsDrawer } from '@/components/settings-drawer';
+import { useTheme } from '@/contexts/ThemeContext';
+import { borderRadius, fs, spacing } from '@/hooks/use-responsive';
+import { HapticPresets } from '@/utils/haptics';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+type SettingsType = 'settings' | 'theme' | 'about' | null;
 
 export default function ProfileScreen() {
-  const scheme = useColorScheme() ?? 'dark';
-  const theme = Colors[scheme];
+  const { scheme, resolvedScheme, theme, setScheme } = useTheme();
+  const [settingsType, setSettingsType] = useState<SettingsType>(null);
+
+  const handleThemeChange = (newScheme: 'light' | 'dark' | 'system') => {
+    setScheme(newScheme);
+  };
+
+  const openSettings = (type: SettingsType) => {
+    HapticPresets.button();
+    setSettingsType(type);
+  };
+
+  const closeSettings = () => {
+    setSettingsType(null);
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
@@ -17,9 +34,6 @@ export default function ProfileScreen() {
             <Text style={[styles.title, { color: theme.text }]}>个人</Text>
             <Text style={[styles.subtitle, { color: theme.tabIconDefault }]}>账号与偏好设置</Text>
           </View>
-          <View style={[styles.avatar, { backgroundColor: theme.cardMuted, borderColor: theme.border }]}>
-            <MaterialIcons name="person" size={22} color={theme.icon} />
-          </View>
         </View>
 
         <View
@@ -27,7 +41,7 @@ export default function ProfileScreen() {
             styles.hero,
             {
               backgroundColor:
-                scheme === 'dark' ? 'rgba(23, 26, 33, 0.72)' : 'rgba(255, 255, 255, 0.72)',
+                resolvedScheme === 'dark' ? 'rgba(23, 26, 33, 0.72)' : 'rgba(255, 255, 255, 0.72)',
               borderColor: theme.border,
             },
           ]}
@@ -50,28 +64,60 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.grid}>
-          {[
-            { key: 'settings', title: '设置', icon: 'settings' },
-            { key: 'theme', title: '外观', icon: 'palette' },
-            { key: 'sync', title: '同步', icon: 'cloud-sync' },
-            { key: 'about', title: '关于', icon: 'info-outline' },
-          ].map((item) => (
-            <TouchableOpacity
-              key={item.key}
-              activeOpacity={0.85}
-              style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}
-            >
-              <View style={[styles.cardIcon, { backgroundColor: theme.cardMuted }]}>
-                <MaterialIcons name={item.icon as any} size={22} color={theme.tint} />
-              </View>
-              <Text style={[styles.cardTitle, { color: theme.text }]} numberOfLines={1}>
-                {item.title}
-              </Text>
-              <Text style={[styles.cardMeta, { color: theme.tabIconDefault }]}>开发中</Text>
-            </TouchableOpacity>
-          ))}
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}
+            onPress={() => openSettings('settings')}
+          >
+            <View style={[styles.cardIcon, { backgroundColor: theme.cardMuted }]}>
+              <MaterialIcons name="settings" size={22} color={theme.tint} />
+            </View>
+            <Text style={[styles.cardTitle, { color: theme.text }]} numberOfLines={1}>
+              设置
+            </Text>
+            <Text style={[styles.cardMeta, { color: theme.tabIconDefault }]}>通知、反馈、音效</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}
+            onPress={() => openSettings('theme')}
+          >
+            <View style={[styles.cardIcon, { backgroundColor: theme.cardMuted }]}>
+              <MaterialIcons name="palette" size={22} color={theme.tint} />
+            </View>
+            <Text style={[styles.cardTitle, { color: theme.text }]} numberOfLines={1}>
+              外观
+            </Text>
+            <Text style={[styles.cardMeta, { color: theme.tabIconDefault }]}>主题切换</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}
+            onPress={() => openSettings('about')}
+          >
+            <View style={[styles.cardIcon, { backgroundColor: theme.cardMuted }]}>
+              <MaterialIcons name="info-outline" size={22} color={theme.tint} />
+            </View>
+            <Text style={[styles.cardTitle, { color: theme.text }]} numberOfLines={1}>
+              关于
+            </Text>
+            <Text style={[styles.cardMeta, { color: theme.tabIconDefault }]}>版本信息</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
+
+      <SettingsDrawer
+        visible={!!settingsType}
+        onClose={closeSettings}
+        scheme={scheme}
+        resolvedScheme={resolvedScheme}
+        theme={theme}
+        settingsType={settingsType}
+        onThemeChange={handleThemeChange}
+        onSettingsTypeChange={setSettingsType}
+      />
     </SafeAreaView>
   );
 }
@@ -81,101 +127,90 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 110,
+    paddingHorizontal: spacing(16),
+    paddingTop: spacing(10),
+    paddingBottom: spacing(110),
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingBottom: 14,
+    paddingBottom: spacing(14),
   },
   title: {
-    fontSize: 28,
+    fontSize: fs(28),
     fontWeight: '800',
     letterSpacing: -0.3,
   },
   subtitle: {
-    marginTop: 6,
-    fontSize: 14,
+    marginTop: spacing(6),
+    fontSize: fs(14),
     fontWeight: '600',
   },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 18,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   hero: {
-    borderRadius: 24,
+    borderRadius: borderRadius(24),
     borderWidth: 1,
-    padding: 16,
-    marginBottom: 14,
+    padding: spacing(16),
+    marginBottom: spacing(14),
   },
   heroRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: spacing(12),
     alignItems: 'center',
   },
   heroIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
+    width: spacing(44),
+    height: spacing(44),
+    borderRadius: borderRadius(16),
     alignItems: 'center',
     justifyContent: 'center',
   },
   heroText: {
     flex: 1,
-    gap: 4,
+    gap: spacing(4),
   },
   heroTitle: {
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '800',
     letterSpacing: -0.1,
   },
   heroDesc: {
-    fontSize: 13,
+    fontSize: fs(13),
     fontWeight: '600',
     lineHeight: 18,
   },
   sectionHeader: {
-    marginTop: 6,
-    marginBottom: 10,
+    marginTop: spacing(6),
+    marginBottom: spacing(10),
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: fs(18),
     fontWeight: '800',
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: spacing(12),
   },
   card: {
     width: '48%',
-    borderRadius: 22,
+    borderRadius: borderRadius(22),
     borderWidth: 1,
-    padding: 14,
+    padding: spacing(14),
   },
   cardIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
+    width: spacing(44),
+    height: spacing(44),
+    borderRadius: borderRadius(16),
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: spacing(10),
   },
   cardTitle: {
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '800',
     letterSpacing: -0.1,
   },
   cardMeta: {
-    marginTop: 4,
-    fontSize: 12,
+    marginTop: spacing(4),
+    fontSize: fs(12),
     fontWeight: '700',
   },
 });

@@ -1,14 +1,14 @@
 export const Colors = {
   light: {
-    text: '#0F1222',
-    background: '#F6F7FB',
-    tint: '#FF4D8D',
-    icon: '#6C7080',
-    tabIconDefault: '#8A8FA3',
-    tabIconSelected: '#FF4D8D',
-    card: '#FFFFFF',
-    cardMuted: '#EEF0F6',
-    border: 'rgba(15, 18, 34, 0.10)',
+    text: '#2A2520',
+    background: '#F0E9DC',
+    tint: '#E6457A',
+    icon: '#5A534A',
+    tabIconDefault: '#8A8278',
+    tabIconSelected: '#E6457A',
+    card: '#FDF9F4',
+    cardMuted: '#E8E1D4',
+    border: 'rgba(42, 37, 32, 0.15)',
   },
   dark: {
     text: '#F4F6FA',

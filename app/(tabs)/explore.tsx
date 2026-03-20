@@ -1,24 +1,23 @@
+import { useTheme } from '@/contexts/ThemeContext';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { borderRadius, fs, spacing } from '@/hooks/use-responsive';
 
 export default function ToolsScreen() {
-  const scheme = useColorScheme() ?? 'dark';
-  const theme = Colors[scheme];
+  const { theme } = useTheme();
+  const router = useRouter();
   const [query, setQuery] = useState('');
 
   const tools = useMemo(
     () => [
-      { key: 'timer', title: '计时器', icon: 'timer' },
-      { key: 'calc', title: '计算器', icon: 'calculate' },
-      { key: 'scan', title: '扫一扫', icon: 'qr-code-scanner' },
-      { key: 'unit', title: '单位换算', icon: 'swap-horiz' },
-      { key: 'notes', title: '速记', icon: 'edit-note' },
-      { key: 'weather', title: '天气', icon: 'wb-sunny' },
+      { key: 'scan', title: '扫一扫', icon: 'qr-code-scanner', route: '/tools/scanner' },
+      { key: 'timer', title: '计时器', icon: 'timer', route: '/tools/timer' },
+      { key: 'unit', title: '单位换算', icon: 'swap-horiz', route: '/tools/unit-converter' },
+      { key: 'notes', title: '速记本', icon: 'edit-note', route: '/tools/quick-notes' },
     ],
     []
   );
@@ -58,7 +57,6 @@ export default function ToolsScreen() {
 
         <View style={styles.sectionHeader}>
           <Text style={[styles.sectionTitle, { color: theme.text }]}>常用工具</Text>
-          <Text style={[styles.sectionHint, { color: theme.tabIconDefault }]}>占位符图标</Text>
         </View>
 
         <View style={styles.grid}>
@@ -67,6 +65,7 @@ export default function ToolsScreen() {
               key={tool.key}
               activeOpacity={0.85}
               style={[styles.toolCard, { backgroundColor: theme.card, borderColor: theme.border }]}
+              onPress={() => router.push(tool.route as any)}
             >
               <View style={[styles.toolIconWrap, { backgroundColor: theme.cardMuted }]}>
                 <MaterialIcons name={tool.icon as any} size={22} color={theme.tint} />
@@ -74,18 +73,8 @@ export default function ToolsScreen() {
               <Text style={[styles.toolTitle, { color: theme.text }]} numberOfLines={1}>
                 {tool.title}
               </Text>
-              <Text style={[styles.toolMeta, { color: theme.tabIconDefault }]}>开发中</Text>
             </TouchableOpacity>
           ))}
-        </View>
-
-        <View style={[styles.noteCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <View style={styles.noteRow}>
-            <MaterialIcons name="info-outline" size={20} color={theme.icon} />
-            <Text style={[styles.noteText, { color: theme.tabIconDefault }]}>
-              缺少的美术资产先用占位符代替，后续可替换成品牌插画/图标包。
-            </Text>
-          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -97,56 +86,48 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 110,
+    paddingHorizontal: spacing(16),
+    paddingTop: spacing(10),
+    paddingBottom: spacing(110),
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingBottom: 14,
+    paddingBottom: spacing(14),
   },
   headerLeft: {
-    gap: 6,
+    gap: spacing(6),
   },
   title: {
-    fontSize: 28,
+    fontSize: fs(28),
     fontWeight: '800',
     letterSpacing: -0.3,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: fs(14),
     fontWeight: '600',
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
   },
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    borderRadius: 18,
+    gap: spacing(10),
+    borderRadius: borderRadius(18),
     borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 16,
+    paddingHorizontal: spacing(14),
+    paddingVertical: spacing(12),
+    marginBottom: spacing(16),
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '600',
     padding: 0,
   },
   clearBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 10,
+    width: spacing(28),
+    height: spacing(28),
+    borderRadius: borderRadius(10),
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -154,60 +135,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: spacing(10),
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: fs(18),
     fontWeight: '800',
-  },
-  sectionHint: {
-    fontSize: 12,
-    fontWeight: '700',
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: spacing(12),
   },
   toolCard: {
     width: '48%',
-    borderRadius: 22,
+    borderRadius: borderRadius(22),
     borderWidth: 1,
-    padding: 14,
+    padding: spacing(14),
   },
   toolIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
+    width: spacing(44),
+    height: spacing(44),
+    borderRadius: borderRadius(16),
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: spacing(10),
   },
   toolTitle: {
-    fontSize: 16,
+    fontSize: fs(16),
     fontWeight: '800',
     letterSpacing: -0.1,
-  },
-  toolMeta: {
-    marginTop: 4,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  noteCard: {
-    marginTop: 14,
-    borderRadius: 22,
-    borderWidth: 1,
-    padding: 14,
-  },
-  noteRow: {
-    flexDirection: 'row',
-    gap: 10,
-    alignItems: 'flex-start',
-  },
-  noteText: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '600',
-    lineHeight: 18,
   },
 });

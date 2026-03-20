@@ -15,8 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AddTaskDrawer } from '@/components/add-task-drawer';
 import { MessagesDrawer } from '@/components/messages-drawer';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useTheme } from '@/contexts/ThemeContext';
 import {
     borderRadius,
     fs,
@@ -58,8 +57,7 @@ const STORAGE = {
 };
 
 export default function HomeScreen() {
-  const scheme = useColorScheme() ?? 'dark';
-  const theme = Colors[scheme];
+  const { resolvedScheme, theme } = useTheme();
   const [isMessagesOpen, setIsMessagesOpen] = useState(false);
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
   const [editTask, setEditTask] = useState<EditTaskData>(null);
@@ -361,7 +359,7 @@ export default function HomeScreen() {
               styles.progressTrack,
               {
                 backgroundColor:
-                  scheme === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 18, 34, 0.08)',
+                  resolvedScheme === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 18, 34, 0.08)',
               },
             ]}
           >
@@ -395,6 +393,7 @@ export default function HomeScreen() {
           data={tasks}
           keyExtractor={(item) => item.id}
           contentContainerStyle={[styles.listContent, { paddingBottom: listPaddingBottom }]}
+          showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
             <View style={[styles.taskRow, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <TouchableOpacity
@@ -466,7 +465,7 @@ export default function HomeScreen() {
       <AddTaskDrawer
         visible={isAddTaskOpen}
         onClose={() => setIsAddTaskOpen(false)}
-        scheme={scheme}
+        scheme={resolvedScheme}
         theme={theme}
         onAddTask={addTask}
       />
@@ -474,7 +473,7 @@ export default function HomeScreen() {
       <AddTaskDrawer
         visible={!!editTask}
         onClose={closeEditTask}
-        scheme={scheme}
+        scheme={resolvedScheme}
         theme={theme}
         onAddTask={addTask}
         editTask={editTask}
@@ -484,7 +483,7 @@ export default function HomeScreen() {
       <MessagesDrawer
         visible={isMessagesOpen}
         onClose={() => setIsMessagesOpen(false)}
-        scheme={scheme}
+        scheme={resolvedScheme}
         theme={theme}
         dmMessages={dmMessages}
         hasDmDot={hasDmDot || dmMessages.length > 0}
