@@ -45,7 +45,15 @@
         }
       ],
       "expo-localization",
-      "./plugins/withLocalizedAppName"
+      "./plugins/withLocalizedAppName",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#FF4D8D",
+          "sounds": []
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

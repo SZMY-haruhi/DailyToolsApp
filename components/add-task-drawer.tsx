@@ -1,15 +1,20 @@
 import { Colors } from '@/constants/theme';
-import { borderRadius, fs, iconSize, spacing, wp } from '@/hooks/use-responsive';
+import { borderRadius, fs, iconSize, normalize, spacing, wp } from '@/hooks/use-responsive';
+import { HapticPresets } from '@/utils/haptics';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { BlurView } from 'expo-blur';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Animated,
     Dimensions,
     Keyboard,
     Modal,
+    NativeScrollEvent,
+    NativeSyntheticEvent,
     PanResponder,
     Platform,
+    ScrollView,
+    StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
@@ -19,6 +24,7 @@ import {
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const DRAWER_HEIGHT = SCREEN_HEIGHT * 0.67;
 const CLOSE_THRESHOLD = DRAWER_HEIGHT * 0.25;
+const ITEM_HEIGHT = 36;
 
 type Theme = (typeof Colors)['light'];
 type Scheme = keyof typeof Colors;
@@ -29,6 +35,131 @@ interface AddTaskDrawerProps {
   scheme: Scheme;
   theme: Theme;
   onAddTask: (task: string, remindAt: number | null, note: string) => void;
+}
+
+function WheelPicker({
+  items,
+  selectedValue,
+  onSelect,
+  theme,
+  isDark,
+}: {
+  items: number[];
+  selectedValue: number;
+  onSelect: (value: number) => void;
+  theme: Theme;
+  isDark: boolean;
+}) {
+  const scrollViewRef = useRef<ScrollView>(null);
+  const selectedIndex = items.indexOf(selectedValue);
+  const lastSelectedIndex = useRef(selectedIndex);
+
+  useEffect(() => {
+    if (scrollViewRef.current && selectedIndex >= 0) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({
+          y: selectedIndex * ITEM_HEIGHT,
+          animated: false,
+        });
+      }, 50);
+    }
+  }, []);
+
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const offsetY = event.nativeEvent.contentOffset.y;
+      const index = Math.round(offsetY / ITEM_HEIGHT);
+      
+      if (index >= 0 && index < items.length && index !== lastSelectedIndex.current) {
+        lastSelectedIndex.current = index;
+        onSelect(items[index]);
+        HapticPresets.wheel();
+      }
+    },
+    [items, onSelect]
+  );
+
+  const handleScrollEnd = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const offsetY = event.nativeEvent.contentOffset.y;
+      const index = Math.round(offsetY / ITEM_HEIGHT);
+      
+      if (index >= 0 && index < items.length) {
+        scrollViewRef.current?.scrollTo({
+          y: index * ITEM_HEIGHT,
+          animated: true,
+        });
+        
+        if (index !== lastSelectedIndex.current) {
+          lastSelectedIndex.current = index;
+          onSelect(items[index]);
+          HapticPresets.wheel();
+        }
+      }
+    },
+    [items, onSelect]
+  );
+
+  const scrollToIndex = useCallback((index: number) => {
+    if (index >= 0 && index < items.length) {
+      scrollViewRef.current?.scrollTo({
+        y: index * ITEM_HEIGHT,
+        animated: true,
+      });
+      
+      if (index !== lastSelectedIndex.current) {
+        lastSelectedIndex.current = index;
+        onSelect(items[index]);
+        HapticPresets.wheel();
+      }
+    }
+  }, [items, onSelect]);
+
+  return (
+    <View style={styles.wheelContainer}>
+      <View style={[styles.selectionIndicator, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.06)' }]} />
+      <ScrollView
+        ref={scrollViewRef}
+        showsVerticalScrollIndicator={false}
+        snapToInterval={ITEM_HEIGHT}
+        snapToAlignment="center"
+        decelerationRate="fast"
+        onScroll={handleScroll}
+        onMomentumScrollEnd={handleScrollEnd}
+        onScrollEndDrag={handleScrollEnd}
+        scrollEventThrottle={16}
+        contentContainerStyle={styles.wheelScrollContent}
+        bounces={false}
+        overScrollMode="never"
+      >
+        <View style={{ height: ITEM_HEIGHT }} />
+        {items.map((item, index) => {
+          const isSelected = item === selectedValue;
+          return (
+            <TouchableOpacity
+              key={item}
+              style={[styles.wheelItem, { height: ITEM_HEIGHT }]}
+              onPress={() => scrollToIndex(index)}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.wheelItemText,
+                  {
+                    color: isSelected ? theme.text : theme.tabIconDefault,
+                    fontWeight: isSelected ? '700' : '500',
+                  },
+                ]}
+              >
+                {String(item).padStart(2, '0')}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+        <View style={{ height: ITEM_HEIGHT }} />
+      </ScrollView>
+    </View>
+  );
 }
 
 export function AddTaskDrawer({ visible, onClose, scheme, theme, onAddTask }: AddTaskDrawerProps) {
@@ -131,14 +262,17 @@ export function AddTaskDrawer({ visible, onClose, scheme, theme, onAddTask }: Ad
   ).current;
 
   const openTimePicker = () => {
+    HapticPresets.button();
     setShowTimePicker(true);
   };
 
   const closeTimePicker = () => {
+    HapticPresets.cancel();
     setShowTimePicker(false);
   };
 
   const handleClose = () => {
+    HapticPresets.cancel();
     isClosing.current = true;
     Animated.parallel([
       Animated.timing(translateY, {
@@ -161,6 +295,7 @@ export function AddTaskDrawer({ visible, onClose, scheme, theme, onAddTask }: Ad
 
   const handleAddTask = () => {
     if (task.trim() === '') return;
+    HapticPresets.success();
     onAddTask(task, selectedTime, note);
     handleClose();
   };
@@ -168,7 +303,11 @@ export function AddTaskDrawer({ visible, onClose, scheme, theme, onAddTask }: Ad
   const formatTime = (timestamp: number | null) => {
     if (!timestamp) return '无';
     const date = new Date(timestamp);
-    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hour = String(date.getHours()).padStart(2, '0');
+    const minute = String(date.getMinutes()).padStart(2, '0');
+    return `${month}/${day} ${hour}:${minute}`;
   };
 
   const isDark = scheme === 'dark';
@@ -218,11 +357,11 @@ export function AddTaskDrawer({ visible, onClose, scheme, theme, onAddTask }: Ad
                       styles.taskInput,
                       {
                         backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
-                        color: theme.text,
+                        color: isDark ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.55)',
                       }
                     ]}
                     placeholder="添加新任务..."
-                    placeholderTextColor={theme.tabIconDefault}
+                    placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.3)'}
                     value={task}
                     onChangeText={setTask}
                     maxLength={100}
@@ -237,11 +376,11 @@ export function AddTaskDrawer({ visible, onClose, scheme, theme, onAddTask }: Ad
                       styles.noteInput,
                       {
                         backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
-                        color: theme.text,
+                        color: isDark ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.55)',
                       }
                     ]}
                     placeholder="添加备注（可选）"
-                    placeholderTextColor={theme.tabIconDefault}
+                    placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.3)'}
                     value={note}
                     onChangeText={setNote}
                     multiline
@@ -280,7 +419,7 @@ export function AddTaskDrawer({ visible, onClose, scheme, theme, onAddTask }: Ad
                 <TouchableOpacity
                   style={[
                     styles.cancelButton,
-                    { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)' }
+                    { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)' }
                   ]}
                   onPress={handleClose}
                   activeOpacity={0.7}
@@ -291,7 +430,7 @@ export function AddTaskDrawer({ visible, onClose, scheme, theme, onAddTask }: Ad
                   style={[
                     styles.addButton,
                     { 
-                      backgroundColor: task.trim() ? theme.tint : isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.1)',
+                      backgroundColor: task.trim() ? theme.tint : isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
                       opacity: task.trim() ? 1 : 0.6
                     }
                   ]}
@@ -299,7 +438,7 @@ export function AddTaskDrawer({ visible, onClose, scheme, theme, onAddTask }: Ad
                   activeOpacity={0.8}
                   disabled={task.trim() === ''}
                 >
-                  <Text style={styles.addButtonText}>添加</Text>
+                  <Text style={[styles.addButtonText, { color: task.trim() ? '#0D0F14' : theme.tabIconDefault }]}>添加</Text>
                 </TouchableOpacity>
               </View>
             </TouchableOpacity>
@@ -325,76 +464,66 @@ export function AddTaskDrawer({ visible, onClose, scheme, theme, onAddTask }: Ad
                       <MaterialIcons name="close" size={iconSize(22)} color={theme.icon} />
                     </TouchableOpacity>
                   </View>
-                  <View style={styles.timePickerContent}>
+
+                  <View style={styles.timePickerRow}>
                     <View style={[styles.timePickerBox, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)' }]}>
-                      <Text style={[styles.timePickerBoxLabel, { color: theme.text }]}>小时</Text>
-                      <View style={styles.demoTimePicker}>
-                        {Array.from({ length: 5 }, (_, i) => {
-                          const baseHour = selectedTime ? new Date(selectedTime).getHours() : 9;
-                          const hour = (baseHour - 2 + i + 24) % 24;
-                          const isSelected = selectedTime && new Date(selectedTime).getHours() === hour;
-                          return (
-                            <TouchableOpacity
-                              key={`hour-${hour}`}
-                              style={[
-                                styles.demoTimePickerItem,
-                                isSelected && { backgroundColor: theme.tint },
-                              ]}
-                              onPress={() => {
-                                const newTime = selectedTime ? new Date(selectedTime) : new Date();
-                                newTime.setHours(hour, selectedTime ? new Date(selectedTime).getMinutes() : 0);
-                                setSelectedTime(newTime.getTime());
-                              }}
-                            >
-                              <Text
-                                style={[
-                                  styles.demoTimePickerItemText,
-                                  isSelected && styles.demoTimePickerItemTextSelected,
-                                  { color: isSelected ? '#0D0F14' : theme.text },
-                                ]}
-                              >
-                                {String(hour).padStart(2, '0')}
-                              </Text>
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
+                      <Text style={[styles.timePickerBoxLabel, { color: theme.text }]}>月</Text>
+                      <WheelPicker
+                        items={Array.from({ length: 12 }, (_, i) => i + 1)}
+                        selectedValue={selectedTime ? new Date(selectedTime).getMonth() + 1 : new Date().getMonth() + 1}
+                        onSelect={(month) => {
+                          const newTime = selectedTime ? new Date(selectedTime) : new Date();
+                          newTime.setMonth(month - 1);
+                          setSelectedTime(newTime.getTime());
+                        }}
+                        theme={theme}
+                        isDark={isDark}
+                      />
                     </View>
                     <View style={[styles.timePickerBox, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)' }]}>
-                      <Text style={[styles.timePickerBoxLabel, { color: theme.text }]}>分钟</Text>
-                      <View style={styles.demoTimePicker}>
-                        {Array.from({ length: 5 }, (_, i) => {
-                          const baseMinute = selectedTime ? new Date(selectedTime).getMinutes() : 41;
-                          const minute = (baseMinute - 10 + i * 5 + 60) % 60;
-                          const isSelected = selectedTime && new Date(selectedTime).getMinutes() === minute;
-                          return (
-                            <TouchableOpacity
-                              key={`minute-${minute}`}
-                              style={[
-                                styles.demoTimePickerItem,
-                                isSelected && { backgroundColor: theme.tint },
-                              ]}
-                              onPress={() => {
-                                const newTime = selectedTime ? new Date(selectedTime) : new Date();
-                                newTime.setHours(selectedTime ? new Date(selectedTime).getHours() : 0, minute);
-                                setSelectedTime(newTime.getTime());
-                              }}
-                            >
-                              <Text
-                                style={[
-                                  styles.demoTimePickerItemText,
-                                  isSelected && styles.demoTimePickerItemTextSelected,
-                                  { color: isSelected ? '#0D0F14' : theme.text },
-                                ]}
-                              >
-                                {String(minute).padStart(2, '0')}
-                              </Text>
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
+                      <Text style={[styles.timePickerBoxLabel, { color: theme.text }]}>日</Text>
+                      <WheelPicker
+                        items={Array.from({ length: 31 }, (_, i) => i + 1)}
+                        selectedValue={selectedTime ? new Date(selectedTime).getDate() : new Date().getDate()}
+                        onSelect={(day) => {
+                          const newTime = selectedTime ? new Date(selectedTime) : new Date();
+                          newTime.setDate(day);
+                          setSelectedTime(newTime.getTime());
+                        }}
+                        theme={theme}
+                        isDark={isDark}
+                      />
+                    </View>
+                    <View style={[styles.timePickerBox, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)' }]}>
+                      <Text style={[styles.timePickerBoxLabel, { color: theme.text }]}>时</Text>
+                      <WheelPicker
+                        items={Array.from({ length: 24 }, (_, i) => i)}
+                        selectedValue={selectedTime ? new Date(selectedTime).getHours() : new Date().getHours()}
+                        onSelect={(hour) => {
+                          const newTime = selectedTime ? new Date(selectedTime) : new Date();
+                          newTime.setHours(hour);
+                          setSelectedTime(newTime.getTime());
+                        }}
+                        theme={theme}
+                        isDark={isDark}
+                      />
+                    </View>
+                    <View style={[styles.timePickerBox, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)' }]}>
+                      <Text style={[styles.timePickerBoxLabel, { color: theme.text }]}>分</Text>
+                      <WheelPicker
+                        items={Array.from({ length: 60 }, (_, i) => i)}
+                        selectedValue={selectedTime ? new Date(selectedTime).getMinutes() : new Date().getMinutes()}
+                        onSelect={(minute) => {
+                          const newTime = selectedTime ? new Date(selectedTime) : new Date();
+                          newTime.setMinutes(minute);
+                          setSelectedTime(newTime.getTime());
+                        }}
+                        theme={theme}
+                        isDark={isDark}
+                      />
                     </View>
                   </View>
+
                   <TouchableOpacity
                     style={[styles.timePickerConfirm, { backgroundColor: theme.tint }]}
                     onPress={closeTimePicker}
@@ -412,7 +541,7 @@ export function AddTaskDrawer({ visible, onClose, scheme, theme, onAddTask }: Ad
   );
 }
 
-const styles = {
+const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
@@ -425,9 +554,19 @@ const styles = {
     borderTopLeftRadius: borderRadius(32),
     borderTopRightRadius: borderRadius(32),
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 24,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
   },
   blurContainer: {
     flex: 1,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.2)',
   },
   handleContainer: {
     paddingTop: spacing(12),
@@ -472,15 +611,25 @@ const styles = {
     fontSize: fs(17),
     fontWeight: '500',
     padding: spacing(18),
-    borderRadius: borderRadius(18),
+    borderRadius: borderRadius(20),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
   },
   noteInput: {
     fontSize: fs(16),
     fontWeight: '500',
     padding: spacing(18),
-    borderRadius: borderRadius(18),
+    borderRadius: borderRadius(20),
     minHeight: spacing(100),
     textAlignVertical: 'top',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
   },
   remindRow: {
     flexDirection: 'row',
@@ -493,7 +642,12 @@ const styles = {
     gap: spacing(10),
     paddingHorizontal: spacing(18),
     paddingVertical: spacing(14),
-    borderRadius: borderRadius(16),
+    borderRadius: borderRadius(20),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
   },
   remindText: {
     fontSize: fs(15),
@@ -508,10 +662,15 @@ const styles = {
   },
   cancelButton: {
     flex: 1,
-    height: spacing(52),
-    borderRadius: borderRadius(16),
+    height: normalize(72),
+    borderRadius: borderRadius(20),
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 14,
+    elevation: 10,
   },
   cancelButtonText: {
     fontSize: fs(17),
@@ -519,10 +678,15 @@ const styles = {
   },
   addButton: {
     flex: 2,
-    height: spacing(52),
-    borderRadius: borderRadius(16),
+    height: normalize(72),
+    borderRadius: borderRadius(20),
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.4,
+    shadowRadius: 18,
+    elevation: 14,
   },
   addButtonText: {
     fontSize: fs(17),
@@ -545,66 +709,72 @@ const styles = {
     overflow: 'hidden',
   },
   timePickerContainer: {
-    padding: spacing(22),
+    padding: spacing(14),
   },
   timePickerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing(24),
+    marginBottom: spacing(14),
   },
   timePickerTitle: {
-    fontSize: fs(19),
+    fontSize: fs(16),
     fontWeight: '700',
   },
-  timePickerContent: {
+  timePickerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: spacing(24),
+    marginBottom: spacing(14),
+    gap: spacing(4),
   },
   timePickerBox: {
     flex: 1,
     alignItems: 'center',
-    borderRadius: borderRadius(20),
-    padding: spacing(16),
-    marginHorizontal: spacing(4),
+    borderRadius: borderRadius(12),
+    paddingVertical: spacing(6),
+    paddingHorizontal: spacing(2),
   },
   timePickerBoxLabel: {
-    fontSize: fs(14),
+    fontSize: fs(11),
     fontWeight: '600',
-    marginBottom: spacing(12),
+    marginBottom: spacing(4),
   },
-  demoTimePicker: {
-    flex: 1,
-    flexDirection: 'column',
+  wheelContainer: {
+    height: ITEM_HEIGHT * 3,
+    width: '100%',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  selectionIndicator: {
+    position: 'absolute',
+    top: ITEM_HEIGHT,
+    left: 0,
+    right: 0,
+    height: ITEM_HEIGHT,
+    borderRadius: borderRadius(8),
+  },
+  wheelScrollContent: {
+    paddingHorizontal: spacing(2),
+  },
+  wheelItem: {
     justifyContent: 'center',
     alignItems: 'center',
+    width: '100%',
   },
-  demoTimePickerItem: {
-    paddingVertical: spacing(12),
-    paddingHorizontal: spacing(22),
-    borderRadius: borderRadius(12),
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  demoTimePickerItemText: {
-    fontSize: fs(17),
-    fontWeight: '500',
-  },
-  demoTimePickerItemTextSelected: {
-    color: '#0D0F14',
-    fontWeight: '700',
+  wheelItemText: {
+    fontSize: fs(15),
   },
   timePickerConfirm: {
-    width: '100%',
-    height: spacing(52),
-    borderRadius: borderRadius(16),
+    alignSelf: 'center',
+    paddingHorizontal: spacing(48),
+    height: spacing(40),
+    borderRadius: borderRadius(20),
     alignItems: 'center',
     justifyContent: 'center',
   },
   timePickerConfirmText: {
-    fontSize: fs(17),
+    fontSize: fs(15),
     fontWeight: '700',
     color: '#0D0F14',
   },
-};
+});

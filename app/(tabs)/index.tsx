@@ -2,13 +2,14 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Animated,
+    FlatList,
+    KeyboardAvoidingView,
+    Platform,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -17,12 +18,18 @@ import { MessagesDrawer } from '@/components/messages-drawer';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
-  borderRadius,
-  fs,
-  getTabBarHeight,
-  iconSize,
-  spacing
+    borderRadius,
+    fs,
+    getTabBarHeight,
+    iconSize,
+    spacing
 } from '@/hooks/use-responsive';
+import { HapticPresets } from '@/utils/haptics';
+import {
+    cancelTaskReminder,
+    requestNotificationPermissions,
+    scheduleTaskReminder,
+} from '@/utils/notifications';
 
 type Task = {
   id: string;
@@ -30,6 +37,8 @@ type Task = {
   done: boolean;
   remindAt?: number | null;
   reminded?: boolean;
+  notificationId?: string | null;
+  note?: string;
 };
 
 type DmMessage = {
@@ -58,6 +67,10 @@ export default function HomeScreen() {
   const [dismissAllSeq, setDismissAllSeq] = useState(0);
   const [dmMessages, setDmMessages] = useState<DmMessage[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+
+  useEffect(() => {
+    requestNotificationPermissions();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -169,8 +182,19 @@ export default function HomeScreen() {
     return `${hh}:${mm}:${ss}`;
   }, [now]);
 
-  const addTask = (text: string, remindAt: number | null, note: string) => {
+  const addTask = async (text: string, remindAt: number | null, note: string) => {
     const id = Date.now().toString();
+    let notificationId: string | null = null;
+
+    if (remindAt) {
+      notificationId = await scheduleTaskReminder(
+        id,
+        '任务提醒',
+        `到时间啦：${text}`,
+        new Date(remindAt)
+      );
+    }
+
     setTasks((prev) => [
       ...prev,
       {
@@ -179,6 +203,8 @@ export default function HomeScreen() {
         done: false,
         remindAt,
         reminded: false,
+        notificationId,
+        note,
       },
     ]);
   };
@@ -187,13 +213,37 @@ export default function HomeScreen() {
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
   };
 
-  const deleteTask = (id: string) => {
+  const deleteTask = async (id: string) => {
+    const task = tasks.find((t) => t.id === id);
+    if (task?.notificationId) {
+      await cancelTaskReminder(task.notificationId);
+    }
     setTasks((prev) => prev.filter((t) => t.id !== id));
   };
 
   const doneCount = tasks.filter(t => t.done).length;
   const totalCount = tasks.length;
   const percent = totalCount === 0 ? 0 : Math.round((doneCount / totalCount) * 100);
+
+  const progressAnim = useRef(new Animated.Value(0)).current;
+  const prevPercent = useRef(0);
+
+  useEffect(() => {
+    if (prevPercent.current !== percent) {
+      Animated.spring(progressAnim, {
+        toValue: percent,
+        useNativeDriver: false,
+        tension: 50,
+        friction: 8,
+      }).start();
+      prevPercent.current = percent;
+    }
+  }, [percent, progressAnim]);
+
+  const progressWidth = progressAnim.interpolate({
+    inputRange: [0, 100],
+    outputRange: ['0%', '100%'],
+  });
 
   const markDmDotRead = () => {
     setHasDmDot(false);
@@ -227,13 +277,16 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <Text style={[styles.greeting, { color: theme.text }]}>{timeText}</Text>
-            <Text style={[styles.subtitle, { color: theme.tabIconDefault }]}>欢迎回来</Text>
+            <Text style={[styles.subtitle, { color: theme.tabIconDefault }]}>炸猪排的工具箱</Text>
           </View>
           <View style={styles.headerRight}>
             <TouchableOpacity
               activeOpacity={0.8}
               style={[styles.iconButton, { backgroundColor: theme.card }]}
-              onPress={() => setIsMessagesOpen(true)}
+              onPress={() => {
+                HapticPresets.button();
+                setIsMessagesOpen(true);
+              }}
             >
               <MaterialIcons name="notifications-none" size={iconSize(22)} color={theme.icon} />
               {hasBellDot && <View style={[styles.notifyDot, { backgroundColor: theme.tint }]} />}
@@ -263,11 +316,11 @@ export default function HomeScreen() {
               },
             ]}
           >
-            <View
+            <Animated.View
               style={[
                 styles.progressFill,
                 {
-                  width: `${percent}%`,
+                  width: progressWidth,
                   backgroundColor: theme.tint,
                 },
               ]}
@@ -277,10 +330,16 @@ export default function HomeScreen() {
 
         <View style={styles.sectionHeader}>
           <Text style={[styles.sectionTitle, { color: theme.text }]}>任务</Text>
-          <View style={[styles.pill, { backgroundColor: theme.card }]}>
-            <MaterialIcons name="filter-list" size={iconSize(18)} color={theme.icon} />
-            <Text style={[styles.pillText, { color: theme.tabIconDefault }]}>全部</Text>
-          </View>
+          <TouchableOpacity
+            style={[styles.addBtn, { backgroundColor: theme.tint }]}
+            onPress={() => {
+              HapticPresets.button();
+              setIsAddTaskOpen(true);
+            }}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons name="add" size={iconSize(20)} color="#0D0F14" />
+          </TouchableOpacity>
         </View>
 
         <FlatList
@@ -290,7 +349,10 @@ export default function HomeScreen() {
           renderItem={({ item }) => (
             <View style={[styles.taskRow, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <TouchableOpacity
-                onPress={() => toggleTask(item.id)}
+                onPress={() => {
+                  HapticPresets.button();
+                  toggleTask(item.id);
+                }}
                 activeOpacity={0.8}
                 style={styles.taskLeft}
               >
@@ -310,7 +372,13 @@ export default function HomeScreen() {
                   {item.text}
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => deleteTask(item.id)} activeOpacity={0.8}>
+              <TouchableOpacity
+                onPress={async () => {
+                  HapticPresets.delete();
+                  await deleteTask(item.id);
+                }}
+                activeOpacity={0.8}
+              >
                 <MaterialIcons name="delete-outline" size={iconSize(22)} color={theme.tabIconDefault} />
               </TouchableOpacity>
             </View>
@@ -318,7 +386,10 @@ export default function HomeScreen() {
           ListEmptyComponent={
             <TouchableOpacity
               style={[styles.emptyCard, { backgroundColor: theme.card, borderColor: theme.border }]}
-              onPress={() => setIsAddTaskOpen(true)}
+              onPress={() => {
+                HapticPresets.button();
+                setIsAddTaskOpen(true);
+              }}
               activeOpacity={0.8}
             >
               <MaterialIcons name="add-circle-outline" size={iconSize(32)} color={theme.tabIconDefault} />
@@ -326,16 +397,6 @@ export default function HomeScreen() {
             </TouchableOpacity>
           }
         />
-
-        {tasks.length > 0 && (
-          <TouchableOpacity
-            style={[styles.fab, { backgroundColor: theme.tint }]}
-            onPress={() => setIsAddTaskOpen(true)}
-            activeOpacity={0.85}
-          >
-            <MaterialIcons name="add" size={iconSize(28)} color="#0D0F14" />
-          </TouchableOpacity>
-        )}
       </SafeAreaView>
 
       <AddTaskDrawer
@@ -462,18 +523,6 @@ const styles = StyleSheet.create({
     fontSize: fs(18),
     fontWeight: '800',
   },
-  pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing(6),
-    paddingHorizontal: spacing(12),
-    paddingVertical: spacing(8),
-    borderRadius: 999,
-  },
-  pillText: {
-    fontSize: fs(13),
-    fontWeight: '700',
-  },
   listContent: {
     paddingBottom: spacing(130),
   },
@@ -515,19 +564,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing(8),
   },
-  fab: {
-    position: 'absolute',
-    bottom: spacing(24),
-    right: spacing(16),
-    width: spacing(56),
-    height: spacing(56),
-    borderRadius: borderRadius(28),
+  addBtn: {
+    width: spacing(36),
+    height: spacing(36),
+    borderRadius: borderRadius(12),
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#FF4D8D',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
   },
 });
