@@ -29,12 +29,21 @@ const ITEM_HEIGHT = 36;
 type Theme = (typeof Colors)['light'];
 type Scheme = keyof typeof Colors;
 
+export type EditTaskData = {
+  id: string;
+  text: string;
+  note?: string;
+  remindAt?: number | null;
+} | null;
+
 interface AddTaskDrawerProps {
   visible: boolean;
   onClose: () => void;
   scheme: Scheme;
   theme: Theme;
   onAddTask: (task: string, remindAt: number | null, note: string) => void;
+  editTask?: EditTaskData;
+  onUpdateTask?: (id: string, task: string, remindAt: number | null, note: string) => void;
 }
 
 function WheelPicker({
@@ -162,7 +171,7 @@ function WheelPicker({
   );
 }
 
-export function AddTaskDrawer({ visible, onClose, scheme, theme, onAddTask }: AddTaskDrawerProps) {
+export function AddTaskDrawer({ visible, onClose, scheme, theme, onAddTask, editTask, onUpdateTask }: AddTaskDrawerProps) {
   const [task, setTask] = useState('');
   const [note, setNote] = useState('');
   const [selectedTime, setSelectedTime] = useState<number | null>(null);
@@ -171,6 +180,16 @@ export function AddTaskDrawer({ visible, onClose, scheme, theme, onAddTask }: Ad
   const translateY = useRef(new Animated.Value(DRAWER_HEIGHT)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const isClosing = useRef(false);
+
+  const isEditMode = !!editTask;
+
+  useEffect(() => {
+    if (visible && editTask) {
+      setTask(editTask.text);
+      setNote(editTask.note || '');
+      setSelectedTime(editTask.remindAt || null);
+    }
+  }, [visible, editTask]);
 
   useEffect(() => {
     if (visible) {
@@ -296,7 +315,11 @@ export function AddTaskDrawer({ visible, onClose, scheme, theme, onAddTask }: Ad
   const handleAddTask = () => {
     if (task.trim() === '') return;
     HapticPresets.success();
-    onAddTask(task, selectedTime, note);
+    if (isEditMode && editTask && onUpdateTask) {
+      onUpdateTask(editTask.id, task, selectedTime, note);
+    } else {
+      onAddTask(task, selectedTime, note);
+    }
     handleClose();
   };
 
@@ -347,7 +370,7 @@ export function AddTaskDrawer({ visible, onClose, scheme, theme, onAddTask }: Ad
               </View>
 
               <View style={styles.header}>
-                <Text style={[styles.headerTitle, { color: theme.text }]}>新建任务</Text>
+                <Text style={[styles.headerTitle, { color: theme.text }]}>{isEditMode ? '编辑任务' : '新建任务'}</Text>
               </View>
 
               <View style={styles.content}>

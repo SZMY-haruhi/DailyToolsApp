@@ -12,6 +12,10 @@ Notifications.setNotificationHandler({
 });
 
 export async function requestNotificationPermissions(): Promise<boolean> {
+  if (Platform.OS === 'web') {
+    return false;
+  }
+
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
 
@@ -42,6 +46,10 @@ export async function scheduleTaskReminder(
   body: string,
   remindAt: Date
 ): Promise<string | null> {
+  if (Platform.OS === 'web') {
+    return null;
+  }
+
   const hasPermission = await requestNotificationPermissions();
   if (!hasPermission) {
     return null;
@@ -72,13 +80,22 @@ export async function scheduleTaskReminder(
 }
 
 export async function cancelTaskReminder(identifier: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    return;
+  }
   await Notifications.cancelScheduledNotificationAsync(identifier);
 }
 
 export async function cancelAllReminders(): Promise<void> {
+  if (Platform.OS === 'web') {
+    return;
+  }
   await Notifications.cancelAllScheduledNotificationsAsync();
 }
 
 export async function getAllScheduledReminders(): Promise<Notifications.NotificationRequest[]> {
+  if (Platform.OS === 'web') {
+    return [];
+  }
   return await Notifications.getAllScheduledNotificationsAsync();
 }

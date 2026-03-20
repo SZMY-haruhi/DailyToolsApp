@@ -62,6 +62,7 @@ export default function HomeScreen() {
   const theme = Colors[scheme];
   const [isMessagesOpen, setIsMessagesOpen] = useState(false);
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
+  const [editTask, setEditTask] = useState<EditTaskData>(null);
   const [hasDmDot, setHasDmDot] = useState(false);
   const [hasNoticeDot, setHasNoticeDot] = useState(false);
   const [dismissAllSeq, setDismissAllSeq] = useState(0);
@@ -221,6 +222,54 @@ export default function HomeScreen() {
     setTasks((prev) => prev.filter((t) => t.id !== id));
   };
 
+  const updateTask = async (id: string, text: string, remindAt: number | null, note: string) => {
+    const oldTask = tasks.find((t) => t.id === id);
+    if (oldTask?.notificationId) {
+      await cancelTaskReminder(oldTask.notificationId);
+    }
+
+    let notificationId: string | null = null;
+    if (remindAt) {
+      notificationId = await scheduleTaskReminder(
+        id,
+        '任务提醒',
+        `到时间啦：${text}`,
+        new Date(remindAt)
+      );
+    }
+
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === id
+          ? { ...t, text, remindAt, note, notificationId, reminded: false }
+          : t
+      )
+    );
+  };
+
+  const openEditTask = (task: Task) => {
+    HapticPresets.button();
+    setEditTask({
+      id: task.id,
+      text: task.text,
+      note: task.note,
+      remindAt: task.remindAt,
+    });
+  };
+
+  const closeEditTask = () => {
+    setEditTask(null);
+  };
+
+  const formatRemindTime = (timestamp: number) => {
+    const date = new Date(timestamp);
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hour = String(date.getHours()).padStart(2, '0');
+    const minute = String(date.getMinutes()).padStart(2, '0');
+    return `${month}/${day} ${hour}:${minute}`;
+  };
+
   const doneCount = tasks.filter(t => t.done).length;
   const totalCount = tasks.length;
   const percent = totalCount === 0 ? 0 : Math.round((doneCount / totalCount) * 100);
@@ -354,13 +403,18 @@ export default function HomeScreen() {
                   toggleTask(item.id);
                 }}
                 activeOpacity={0.8}
-                style={styles.taskLeft}
               >
                 <MaterialIcons
                   name={item.done ? 'check-box' : 'check-box-outline-blank'}
                   size={iconSize(22)}
                   color={item.done ? theme.tint : theme.tabIconDefault}
                 />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => openEditTask(item)}
+                activeOpacity={0.8}
+                style={styles.taskLeft}
+              >
                 <Text
                   style={[
                     styles.taskText,
@@ -372,15 +426,25 @@ export default function HomeScreen() {
                   {item.text}
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                onPress={async () => {
-                  HapticPresets.delete();
-                  await deleteTask(item.id);
-                }}
-                activeOpacity={0.8}
-              >
-                <MaterialIcons name="delete-outline" size={iconSize(22)} color={theme.tabIconDefault} />
-              </TouchableOpacity>
+              <View style={styles.taskRight}>
+                {item.remindAt && (
+                  <View style={styles.remindTag}>
+                    <MaterialIcons name="schedule" size={iconSize(14)} color={theme.tint} />
+                    <Text style={[styles.remindText, { color: theme.tint }]}>
+                      {formatRemindTime(item.remindAt)}
+                    </Text>
+                  </View>
+                )}
+                <TouchableOpacity
+                  onPress={async () => {
+                    HapticPresets.delete();
+                    await deleteTask(item.id);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <MaterialIcons name="delete-outline" size={iconSize(22)} color={theme.tabIconDefault} />
+                </TouchableOpacity>
+              </View>
             </View>
           )}
           ListEmptyComponent={
@@ -405,6 +469,16 @@ export default function HomeScreen() {
         scheme={scheme}
         theme={theme}
         onAddTask={addTask}
+      />
+
+      <AddTaskDrawer
+        visible={!!editTask}
+        onClose={closeEditTask}
+        scheme={scheme}
+        theme={theme}
+        onAddTask={addTask}
+        editTask={editTask}
+        onUpdateTask={updateTask}
       />
 
       <MessagesDrawer
@@ -551,6 +625,20 @@ const styles = StyleSheet.create({
   taskDone: {
     textDecorationLine: 'line-through',
     opacity: 0.55,
+  },
+  taskRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing(12),
+  },
+  remindTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing(4),
+  },
+  remindText: {
+    fontSize: fs(12),
+    fontWeight: '600',
   },
   empty: {
     marginTop: spacing(8),
