@@ -14,6 +14,7 @@ import {
   Linking,
   Modal,
   PanResponder,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -399,7 +400,7 @@ export function SettingsDrawer({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={handleClose}>
+    <Modal visible={visible} transparent animationType="none" onRequestClose={handleClose} statusBarTranslucent={Platform.OS === 'android'}>
       <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]}>
         <TouchableOpacity style={styles.overlayTouch} activeOpacity={1} onPress={handleClose}>
           <Animated.View
@@ -408,15 +409,22 @@ export function SettingsDrawer({
               {
                 height: DRAWER_HEIGHT,
                 transform: [{ translateY }],
+                borderColor: isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)',
               },
             ]}
           >
             <BlurView
-              intensity={isDark ? 40 : 80}
+              intensity={isDark ? 80 : 100}
               tint={isDark ? 'dark' : 'light'}
-              style={styles.blurContainer}
+              style={[
+                styles.blurContainer,
+                { 
+                  backgroundColor: isDark ? 'rgba(13, 15, 20, 0.85)' : 'rgba(255, 255, 255, 0.92)',
+                  borderTopColor: isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.06)',
+                }
+              ]}
             >
-              <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+              <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{ flex: 1 }}>
                 <View style={styles.handleContainer} {...panResponder.panHandlers}>
                   <View style={[styles.handle, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.25)' : 'rgba(42, 37, 32, 0.25)' }]} />
                 </View>
@@ -493,7 +501,7 @@ export function SettingsDrawer({
                 当前版本 v{versionInfo?.currentVersion}
               </Text>
               <TouchableOpacity
-                style={[styles.updateBtn, styles.updateBtnNow, { backgroundColor: theme.tint, marginTop: spacing(16), width: '100%' }]}
+                style={[styles.updateBtn, styles.updateBtnNow, { backgroundColor: theme.tint, marginTop: spacing(16), width: '100%', flex: 0 }]}
                 onPress={() => setShowNoUpdate(false)}
                 activeOpacity={0.7}
               >
@@ -622,11 +630,15 @@ const styles = StyleSheet.create({
     minWidth: 120,
     borderRadius: borderRadius(18),
     paddingVertical: spacing(4),
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.25,
+        shadowRadius: 20,
+      },
+      android: {},
+    }),
   },
   tabPickerOption: {
     paddingVertical: spacing(10),

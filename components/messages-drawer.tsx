@@ -5,23 +5,21 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { BlurView } from 'expo-blur';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    Animated,
-    Dimensions,
-    FlatList,
-    Modal,
-    PanResponder,
-    Platform,
-    Pressable,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Animated,
+  Dimensions,
+  FlatList,
+  Modal,
+  PanResponder,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const DRAWER_HEIGHT = Math.min(hp(48), Math.max(hp(42), Math.round(SCREEN_HEIGHT * 0.45)));
-const CLOSE_THRESHOLD = DRAWER_HEIGHT * 0.25;
 
 type Theme = (typeof Colors)['light'];
 type Scheme = keyof typeof Colors;
@@ -71,8 +69,14 @@ export function MessagesDrawer({
   onMarkAllRead,
 }: Props) {
   const [activeTab, setActiveTab] = useState<TabKey>('notice');
+  const insets = useSafeAreaInsets();
+  
+  const DRAWER_HEIGHT_DYNAMIC = useMemo(() => {
+    const baseHeight = Math.min(hp(48), Math.max(hp(42), Math.round(SCREEN_HEIGHT * 0.45)));
+    return baseHeight + insets.top;
+  }, [insets.top]);
 
-  const translateY = useRef(new Animated.Value(-DRAWER_HEIGHT)).current;
+  const translateY = useRef(new Animated.Value(-DRAWER_HEIGHT_DYNAMIC)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const isClosing = useRef(false);
 
@@ -106,7 +110,7 @@ export function MessagesDrawer({
     } else if (!isClosing.current) {
       Animated.parallel([
         Animated.timing(translateY, {
-          toValue: -DRAWER_HEIGHT,
+          toValue: -DRAWER_HEIGHT_DYNAMIC,
           duration: 250,
           useNativeDriver: true,
         }),
@@ -128,16 +132,17 @@ export function MessagesDrawer({
       onPanResponderMove: (_, gestureState) => {
         if (gestureState.dy < 0) {
           translateY.setValue(gestureState.dy);
-          const progress = Math.abs(gestureState.dy) / DRAWER_HEIGHT;
+          const progress = Math.abs(gestureState.dy) / DRAWER_HEIGHT_DYNAMIC;
           overlayOpacity.setValue(1 - progress);
         }
       },
       onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dy < -CLOSE_THRESHOLD || gestureState.vy < -0.5) {
+        const closeThreshold = DRAWER_HEIGHT_DYNAMIC * 0.25;
+        if (gestureState.dy < -closeThreshold || gestureState.vy < -0.5) {
           isClosing.current = true;
           Animated.parallel([
             Animated.timing(translateY, {
-              toValue: -DRAWER_HEIGHT,
+              toValue: -DRAWER_HEIGHT_DYNAMIC,
               duration: 200,
               useNativeDriver: true,
             }),
@@ -172,7 +177,7 @@ export function MessagesDrawer({
     isClosing.current = true;
     Animated.parallel([
       Animated.timing(translateY, {
-        toValue: -DRAWER_HEIGHT,
+        toValue: -DRAWER_HEIGHT_DYNAMIC,
         duration: 250,
         useNativeDriver: true,
       }),
@@ -210,6 +215,7 @@ export function MessagesDrawer({
       transparent
       animationType="none"
       onRequestClose={handleClose}
+      statusBarTranslucent={Platform.OS === 'android'}
     >
       <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]}>
         <TouchableOpacity
@@ -221,18 +227,25 @@ export function MessagesDrawer({
             style={[
               styles.container,
               {
-                height: DRAWER_HEIGHT,
+                height: DRAWER_HEIGHT_DYNAMIC,
                 transform: [{ translateY }],
+                borderColor: isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)',
               },
             ]}
           >
             <BlurView
-              intensity={isDark ? 40 : 80}
+              intensity={isDark ? 80 : 100}
               tint={isDark ? 'dark' : 'light'}
-              style={styles.blurContainer}
+              style={[
+                styles.blurContainer,
+                { 
+                  backgroundColor: isDark ? 'rgba(13, 15, 20, 0.85)' : 'rgba(255, 255, 255, 0.92)',
+                  borderBottomColor: isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.06)',
+                }
+              ]}
             >
               <TouchableOpacity activeOpacity={1} onPress={() => {}} style={styles.contentWrapper}>
-                <SafeAreaView edges={['top']} style={styles.safe}>
+                <View style={[styles.safe, { paddingTop: insets.top }]}>
                   <View style={styles.topRow}>
                     <View style={styles.topLeft}>
                       <Text style={[styles.title, { color: theme.text }]}>消息</Text>
@@ -316,7 +329,7 @@ export function MessagesDrawer({
                       );
                     })}
                   </View>
-                </SafeAreaView>
+                </View>
 
                 {activeTab === 'notice' ? (
                   <FlatList
@@ -529,8 +542,13 @@ const styles = StyleSheet.create({
   },
   overlayTouch: {
     flex: 1,
+    justifyContent: 'flex-start',
   },
   container: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
     borderBottomLeftRadius: borderRadius(32),
     borderBottomRightRadius: borderRadius(32),
     overflow: 'hidden',
@@ -592,11 +610,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing(14),
     paddingVertical: spacing(10),
     borderRadius: borderRadius(18),
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.12,
+        shadowRadius: 8,
+      },
+      android: {},
+    }),
   },
   actionText: {
     fontSize: fs(13),
@@ -608,11 +630,15 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius(18),
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.12,
+        shadowRadius: 8,
+      },
+      android: {},
+    }),
   },
   tabs: {
     flexDirection: 'row',
@@ -672,11 +698,15 @@ const styles = StyleSheet.create({
     paddingVertical: spacing(14),
     borderRadius: borderRadius(20),
     gap: spacing(14),
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 6,
+      },
+      android: {},
+    }),
   },
   itemIconWrap: {
     width: spacing(44),

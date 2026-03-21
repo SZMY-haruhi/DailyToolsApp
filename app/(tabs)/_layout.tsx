@@ -1,6 +1,7 @@
 import { Tabs, usePathname, useRouter } from 'expo-router';
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -11,6 +12,7 @@ import { loadSettings } from '@/utils/settings-storage';
 export default function TabLayout() {
   const { resolvedScheme, theme } = useTheme();
   const tabBarHeight = getTabBarHeight();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const pathname = usePathname();
   const hasNavigated = useRef(false);
@@ -30,6 +32,10 @@ export default function TabLayout() {
     });
   }, []);
 
+  const tabBarBottom = Platform.OS === 'android' 
+    ? insets.bottom + spacing(12) 
+    : spacing(18);
+
   return (
     <Tabs
       screenOptions={{
@@ -41,7 +47,7 @@ export default function TabLayout() {
           position: 'absolute',
           left: spacing(16),
           right: spacing(16),
-          bottom: spacing(18),
+          bottom: tabBarBottom,
           height: 72,
           paddingTop: 10,
           paddingBottom: 10,
@@ -59,7 +65,7 @@ export default function TabLayout() {
               shadowOffset: { width: 0, height: 10 },
             },
             android: {
-              elevation: 18,
+              elevation: 0,
             },
             web: {
               boxShadow:

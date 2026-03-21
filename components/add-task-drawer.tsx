@@ -5,24 +5,25 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { BlurView } from 'expo-blur';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    Animated,
-    Dimensions,
-    Keyboard,
-    Modal,
-    NativeScrollEvent,
-    NativeSyntheticEvent,
-    PanResponder,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Animated,
+  Dimensions,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  PanResponder,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const DRAWER_HEIGHT = SCREEN_HEIGHT * 0.67;
+const DRAWER_HEIGHT = SCREEN_HEIGHT * 0.45;
 const CLOSE_THRESHOLD = DRAWER_HEIGHT * 0.25;
 const ITEM_HEIGHT = 36;
 
@@ -62,6 +63,8 @@ function WheelPicker({
   const scrollViewRef = useRef<ScrollView>(null);
   const selectedIndex = items.indexOf(selectedValue);
   const lastSelectedIndex = useRef(selectedIndex);
+  const isSnapping = useRef(false);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (scrollViewRef.current && selectedIndex >= 0) {
@@ -72,10 +75,17 @@ function WheelPicker({
         });
       }, 50);
     }
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
   }, []);
 
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (isSnapping.current) return;
+      
       const offsetY = event.nativeEvent.contentOffset.y;
       const index = Math.round(offsetY / ITEM_HEIGHT);
       
@@ -88,29 +98,60 @@ function WheelPicker({
     [items, onSelect]
   );
 
-  const handleScrollEnd = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const offsetY = event.nativeEvent.contentOffset.y;
-      const index = Math.round(offsetY / ITEM_HEIGHT);
+  const snapToNearest = useCallback(
+    (offsetY: number) => {
+      if (isSnapping.current) return;
       
-      if (index >= 0 && index < items.length) {
-        scrollViewRef.current?.scrollTo({
-          y: index * ITEM_HEIGHT,
-          animated: true,
-        });
-        
-        if (index !== lastSelectedIndex.current) {
-          lastSelectedIndex.current = index;
-          onSelect(items[index]);
-          HapticPresets.wheel();
-        }
+      const index = Math.round(offsetY / ITEM_HEIGHT);
+      const clampedIndex = Math.max(0, Math.min(index, items.length - 1));
+      
+      isSnapping.current = true;
+      
+      scrollViewRef.current?.scrollTo({
+        y: clampedIndex * ITEM_HEIGHT,
+        animated: true,
+      });
+      
+      if (clampedIndex !== lastSelectedIndex.current) {
+        lastSelectedIndex.current = clampedIndex;
+        onSelect(items[clampedIndex]);
+        HapticPresets.wheel();
       }
+      
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+      
+      scrollTimeoutRef.current = setTimeout(() => {
+        isSnapping.current = false;
+      }, 150);
     },
     [items, onSelect]
   );
 
+  const handleMomentumScrollEnd = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const offsetY = event.nativeEvent.contentOffset.y;
+      snapToNearest(offsetY);
+    },
+    [snapToNearest]
+  );
+
+  const handleScrollEndDrag = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const velocity = event.nativeEvent.velocity?.y || 0;
+      if (Math.abs(velocity) < 0.1) {
+        const offsetY = event.nativeEvent.contentOffset.y;
+        snapToNearest(offsetY);
+      }
+    },
+    [snapToNearest]
+  );
+
   const scrollToIndex = useCallback((index: number) => {
-    if (index >= 0 && index < items.length) {
+    if (index >= 0 && index < items.length && !isSnapping.current) {
+      isSnapping.current = true;
+      
       scrollViewRef.current?.scrollTo({
         y: index * ITEM_HEIGHT,
         animated: true,
@@ -121,6 +162,14 @@ function WheelPicker({
         onSelect(items[index]);
         HapticPresets.wheel();
       }
+      
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+      
+      scrollTimeoutRef.current = setTimeout(() => {
+        isSnapping.current = false;
+      }, 150);
     }
   }, [items, onSelect]);
 
@@ -134,8 +183,8 @@ function WheelPicker({
         snapToAlignment="center"
         decelerationRate="fast"
         onScroll={handleScroll}
-        onMomentumScrollEnd={handleScrollEnd}
-        onScrollEndDrag={handleScrollEnd}
+        onMomentumScrollEnd={handleMomentumScrollEnd}
+        onScrollEndDrag={handleScrollEndDrag}
         scrollEventThrottle={16}
         contentContainerStyle={styles.wheelScrollContent}
         bounces={false}
@@ -343,132 +392,145 @@ export function AddTaskDrawer({ visible, onClose, scheme, theme, onAddTask, edit
       transparent
       animationType="none"
       onRequestClose={handleClose}
+      statusBarTranslucent={Platform.OS === 'android'}
     >
-      <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]}>
-        <TouchableOpacity
-          style={styles.overlayTouch}
-          activeOpacity={1}
-          onPress={handleClose}
-        >
-          <Animated.View
-            style={[
-              styles.container,
-              {
-                height: DRAWER_HEIGHT,
-                transform: [{ translateY }],
-              },
-            ]}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+        <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]}>
+          <TouchableOpacity
+            style={styles.overlayTouch}
+            activeOpacity={1}
+            onPress={handleClose}
           >
-          <BlurView
-            intensity={isDark ? 40 : 80}
-            tint={isDark ? 'dark' : 'light'}
-            style={styles.blurContainer}
-          >
-            <TouchableOpacity activeOpacity={1} onPress={() => {}}>
-              <View style={styles.handleContainer} {...panResponder.panHandlers}>
-                <View style={[styles.handle, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.25)' : 'rgba(42, 37, 32, 0.25)' }]} />
-              </View>
-
-              <View style={styles.header}>
-                <Text style={[styles.headerTitle, { color: theme.text }]}>{isEditMode ? '编辑任务' : '新建任务'}</Text>
-              </View>
-
-              <View style={styles.content}>
-                <View style={styles.inputGroup}>
-                  <TextInput
-                    style={[
-                      styles.taskInput,
-                      {
-                        backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
-                        color: isDark ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.55)',
-                      }
-                    ]}
-                    placeholder="添加新任务..."
-                    placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.3)'}
-                    value={task}
-                    onChangeText={setTask}
-                    maxLength={100}
-                    returnKeyType="done"
-                    onSubmitEditing={handleAddTask}
-                  />
+            <Animated.View
+              style={[
+                styles.container,
+                {
+                  height: DRAWER_HEIGHT,
+                  transform: [{ translateY }],
+                  borderColor: isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)',
+                },
+              ]}
+            >
+            <BlurView
+              intensity={isDark ? 80 : 100}
+              tint={isDark ? 'dark' : 'light'}
+              style={[
+                styles.blurContainer,
+                { 
+                  backgroundColor: isDark ? 'rgba(13, 15, 20, 0.85)' : 'rgba(255, 255, 255, 0.92)',
+                  borderTopColor: isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.06)',
+                }
+              ]}
+            >
+              <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{ flex: 1 }}>
+                <View style={styles.handleContainer} {...panResponder.panHandlers}>
+                  <View style={[styles.handle, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.25)' : 'rgba(42, 37, 32, 0.25)' }]} />
                 </View>
 
-                <View style={styles.inputGroup}>
-                  <TextInput
-                    style={[
-                      styles.noteInput,
-                      {
-                        backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
-                        color: isDark ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.55)',
-                      }
-                    ]}
-                    placeholder="添加备注（可选）"
-                    placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.3)'}
-                    value={note}
-                    onChangeText={setNote}
-                    multiline
-                    numberOfLines={3}
-                    maxLength={200}
-                  />
+                <View style={styles.header}>
+                  <Text style={[styles.headerTitle, { color: theme.text }]}>{isEditMode ? '编辑任务' : '新建任务'}</Text>
                 </View>
 
-                <View style={styles.remindRow}>
-                  <Text style={[styles.label, { color: theme.tabIconDefault }]}>提醒时间</Text>
-                  <TouchableOpacity
-                    activeOpacity={0.7}
-                    onPress={openTimePicker}
-                    style={[
-                      styles.remindButton,
-                      { 
-                        backgroundColor: selectedTime
-                          ? theme.tint
-                          : isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
-                      }
-                    ]}
-                  >
-                    <MaterialIcons 
-                      name="schedule" 
-                      size={iconSize(18)} 
-                      color={selectedTime ? '#0D0F14' : theme.tabIconDefault} 
+                <View style={{ flex: 1 }}>
+                <View style={styles.content}>
+                  <View style={styles.inputGroup}>
+                    <TextInput
+                      style={[
+                        styles.taskInput,
+                        {
+                          backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
+                          color: isDark ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.55)',
+                        }
+                      ]}
+                      placeholder="添加新任务..."
+                      placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.3)'}
+                      value={task}
+                      onChangeText={setTask}
+                      maxLength={100}
+                      returnKeyType="next"
                     />
-                    <Text style={[styles.remindText, { color: selectedTime ? '#0D0F14' : theme.tabIconDefault }]}>
-                      {formatTime(selectedTime)}
-                    </Text>
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <TextInput
+                      style={[
+                        styles.noteInput,
+                        {
+                          backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
+                          color: isDark ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.55)',
+                        }
+                      ]}
+                      placeholder="添加备注（可选）"
+                      placeholderTextColor={isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.3)'}
+                      value={note}
+                      onChangeText={setNote}
+                      multiline
+                      numberOfLines={3}
+                      maxLength={200}
+                      showsVerticalScrollIndicator={false}
+                    />
+                  </View>
+
+                  <View style={styles.remindRow}>
+                    <Text style={[styles.label, { color: theme.tabIconDefault }]}>提醒时间</Text>
+                    <TouchableOpacity
+                      activeOpacity={0.7}
+                      onPress={openTimePicker}
+                      style={[
+                        styles.remindButton,
+                        { 
+                          backgroundColor: selectedTime
+                            ? theme.tint
+                            : isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
+                        }
+                      ]}
+                    >
+                      <MaterialIcons 
+                        name="schedule" 
+                        size={iconSize(18)} 
+                        color={selectedTime ? '#0D0F14' : theme.tabIconDefault} 
+                      />
+                      <Text style={[styles.remindText, { color: selectedTime ? '#0D0F14' : theme.tabIconDefault }]}>
+                        {formatTime(selectedTime)}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                <View style={styles.footer}>
+                  <TouchableOpacity
+                    style={[
+                      styles.cancelButton,
+                      { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)' }
+                    ]}
+                    onPress={handleClose}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.cancelButtonText, { color: theme.tabIconDefault }]}>取消</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.addButton,
+                      { 
+                        backgroundColor: task.trim() ? theme.tint : isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
+                        opacity: task.trim() ? 1 : 0.6
+                      }
+                    ]}
+                    onPress={handleAddTask}
+                    activeOpacity={0.8}
+                    disabled={task.trim() === ''}
+                  >
+                    <Text style={[styles.addButtonText, { color: task.trim() ? '#0D0F14' : theme.tabIconDefault }]}>添加</Text>
                   </TouchableOpacity>
                 </View>
-              </View>
-
-              <View style={styles.footer}>
-                <TouchableOpacity
-                  style={[
-                    styles.cancelButton,
-                    { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)' }
-                  ]}
-                  onPress={handleClose}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.cancelButtonText, { color: theme.tabIconDefault }]}>取消</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.addButton,
-                    { 
-                      backgroundColor: task.trim() ? theme.tint : isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
-                      opacity: task.trim() ? 1 : 0.6
-                    }
-                  ]}
-                  onPress={handleAddTask}
-                  activeOpacity={0.8}
-                  disabled={task.trim() === ''}
-                >
-                  <Text style={[styles.addButtonText, { color: task.trim() ? '#0D0F14' : theme.tabIconDefault }]}>添加</Text>
-                </TouchableOpacity>
               </View>
             </TouchableOpacity>
           </BlurView>
         </Animated.View>
+        </TouchableOpacity>
+      </Animated.View>
 
-        {showTimePicker && (
+      {showTimePicker && (
           <TouchableOpacity
             style={styles.timePickerOverlay}
             activeOpacity={1}
@@ -476,9 +538,12 @@ export function AddTaskDrawer({ visible, onClose, scheme, theme, onAddTask, edit
           >
             <TouchableOpacity activeOpacity={1} onPress={() => {}}>
               <BlurView
-                intensity={isDark ? 40 : 80}
+                intensity={isDark ? 80 : 100}
                 tint={isDark ? 'dark' : 'light'}
-                style={styles.timePickerBlur}
+                style={[
+                  styles.timePickerBlur,
+                  { backgroundColor: isDark ? 'rgba(13, 15, 20, 0.88)' : 'rgba(255, 255, 255, 0.92)' }
+                ]}
               >
                 <View style={styles.timePickerContainer}>
                   <View style={styles.timePickerHeader}>
@@ -558,8 +623,7 @@ export function AddTaskDrawer({ visible, onClose, scheme, theme, onAddTask, edit
             </TouchableOpacity>
           </TouchableOpacity>
         )}
-          </TouchableOpacity>
-        </Animated.View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -592,8 +656,8 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(255, 255, 255, 0.2)',
   },
   handleContainer: {
-    paddingTop: spacing(12),
-    paddingBottom: spacing(8),
+    paddingTop: spacing(8),
+    paddingBottom: spacing(4),
     alignItems: 'center',
   },
   handle: {
@@ -610,7 +674,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing(20),
-    paddingVertical: spacing(14),
+    paddingVertical: spacing(8),
   },
   headerTitle: {
     fontSize: fs(22),
@@ -620,7 +684,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: spacing(20),
-    gap: spacing(18),
+    gap: spacing(4),
   },
   inputGroup: {
     gap: spacing(8),
@@ -633,26 +697,34 @@ const styles = StyleSheet.create({
   taskInput: {
     fontSize: fs(17),
     fontWeight: '500',
-    padding: spacing(18),
+    padding: spacing(14),
     borderRadius: borderRadius(20),
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 6,
+      },
+      android: {},
+    }),
   },
   noteInput: {
     fontSize: fs(16),
     fontWeight: '500',
-    padding: spacing(18),
+    padding: spacing(14),
     borderRadius: borderRadius(20),
-    minHeight: spacing(100),
+    minHeight: spacing(80),
     textAlignVertical: 'top',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 6,
+      },
+      android: {},
+    }),
   },
   remindRow: {
     flexDirection: 'row',
@@ -662,15 +734,19 @@ const styles = StyleSheet.create({
   remindButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing(10),
-    paddingHorizontal: spacing(18),
-    paddingVertical: spacing(14),
+    gap: spacing(8),
+    paddingHorizontal: spacing(12),
+    paddingVertical: spacing(8),
     borderRadius: borderRadius(20),
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.12,
+        shadowRadius: 8,
+      },
+      android: {},
+    }),
   },
   remindText: {
     fontSize: fs(15),
@@ -680,7 +756,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing(14),
     paddingHorizontal: spacing(20),
-    paddingVertical: spacing(18),
+    paddingTop: spacing(4),
     paddingBottom: Platform.OS === 'ios' ? spacing(34) : spacing(24),
   },
   cancelButton: {
@@ -689,11 +765,15 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius(20),
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 14,
-    elevation: 10,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.3,
+        shadowRadius: 14,
+      },
+      android: {},
+    }),
   },
   cancelButtonText: {
     fontSize: fs(17),
@@ -705,11 +785,15 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius(20),
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.4,
-    shadowRadius: 18,
-    elevation: 14,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.4,
+        shadowRadius: 18,
+      },
+      android: {},
+    }),
   },
   addButtonText: {
     fontSize: fs(17),
